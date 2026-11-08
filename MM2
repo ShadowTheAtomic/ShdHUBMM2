@@ -1,6 +1,7 @@
--- Shadow HUB | MM2 v5.8
+-- Shadow HUB | MM2 v5.9.2
 -- by [K]vk for Kovak
--- v5.8: invisible real (persiste + restaura), speed toggle 100% desliga, halloween candy
+-- FLING REAL + CANDY REAL + INVISIBLE REAL + TROLL PACK
+-- 141 funções totais
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
@@ -12,6 +13,7 @@ local VirtualUser = game:GetService("VirtualUser")
 local Lighting = game:GetService("Lighting")
 local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -40,7 +42,7 @@ local CONFIG = {
     WalkSpeed = 16, WalkSpeedEnabled = false,
     Noclip = false, InfiniteJump = false, Invisible = false, Fullbright = false, ClickTP = false,
     AntiAFK = true,
-    FlingEnabled = false, FlingPower = 500, AntiFling = false,
+    FlingPower = 500, AntiFling = false,
     GodMode = false, AntiVoid = false, RainbowSkin = false,
     FreezeSelf = false, AntiTP = false,
     NoHead = false, HeadScale = 1,
@@ -55,9 +57,8 @@ local CONFIG = {
     GodModeOP = false,
     RealKill = false, RealKillDelay = 0.15,
     LongKillMurderer = false, LongKillDelay = 0.5, LongKillTargetRole = "auto",
-    AutoCandy = false, CandyTweenSpeed = 80, CandyResetAfter = 50, CandyESP = false,
-    CandySafeY = 500,
-    AutoWinSurvivor = false,
+    AutoCandy = false, CandyResetAfter = 50, CandyESP = false,
+    CandySafeY = 500, AutoWinSurvivor = false,
 }
 
 local state = {
@@ -87,6 +88,7 @@ local state = {
     activeEmoteTrack = nil, activeEmoteName = nil,
     invisibleConn = nil, invisibleOriginals = {},
     speedConn = nil,
+    candyConn = nil, candyCount = 0, candyLastNotify = 0,
 }
 
 local TEAM_DISTANCE = 20
@@ -277,7 +279,6 @@ local function tryWeaponTouch(targetChar, weapon)
     if upper then table.insert(parts, upper) end
     local lower = targetChar:FindFirstChild("LowerTorso")
     if lower then table.insert(parts, lower) end
-
     for attempt = 1, 30 do
         if not targetChar.Parent then break end
         if not targetHum or targetHum.Health <= 0 then break end
@@ -291,9 +292,7 @@ local function tryWeaponTouch(targetChar, weapon)
                 end)
             end
         end
-        if attempt % 2 == 0 then
-            pcall(function() weapon:Activate() end)
-        end
+        if attempt % 2 == 0 then pcall(function() weapon:Activate() end) end
         task.wait(0.008)
     end
     pcall(function() handle.CFrame = originalHandleCF end)
@@ -659,7 +658,7 @@ local SHAREABLE_KEYS = {
     "PanicMode","DodgePro","StealthMode","TrollMode","AntiCamp",
     "NoHead","HeadScale","AutoCollectGun",
     "AutoDodgeKnife","AutoDodgeBullet","DodgeRange","FlingPower",
-    "AutoCandy","CandyTweenSpeed","CandyResetAfter","CandyESP","CandySafeY","AutoWinSurvivor",
+    "AutoCandy","CandyResetAfter","CandyESP","CandySafeY","AutoWinSurvivor",
 }
 
 local function generateConfigCode()
@@ -731,47 +730,128 @@ local function loadConfigLocal()
     end)
 end
 
--- ============ FLING ============
-local function flingPlayer(targetChar, power)
-    if not targetChar or targetChar == player.Character then return end
+-- ============ FLING REAL ============
+local function flingPlayerReal(targetPlayer)
+    if not targetPlayer or targetPlayer == player then return false end
+    local targetChar = targetPlayer.Character
+    if not targetChar then return false end
     local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
     local targetHum = targetChar:FindFirstChild("Humanoid")
-    if not targetHRP then return end
-    local myHrp = getHRP()
-    if not myHrp then return end
-    myHrp.CFrame = CFrame.new(targetHRP.Position + Vector3.new(0, 0, 3))
-    task.wait(0.08)
-    for i = 1, 3 do
-        pcall(function() targetHRP:SetNetworkOwner(player) end)
-        task.wait(0.03)
-    end
-    if targetHum then
-        pcall(function() targetHum.PlatformStand = true end)
-        pcall(function() targetHum.Sit = true end)
-        task.wait(0.02)
-        pcall(function() targetHum.Sit = false end)
-    end
-    pcall(function()
-        targetHRP.AssemblyLinearVelocity = Vector3.new((math.random()-0.5)*power*2, power*2, (math.random()-0.5)*power*2)
-        targetHRP.AssemblyAngularVelocity = Vector3.new((math.random()-0.5)*500, (math.random()-0.5)*500, (math.random()-0.5)*500)
-    end)
+    if not targetHRP or not targetHum then return false end
+    pcall(function() targetHRP:SetNetworkOwner(player) end)
+    task.wait(0.05)
     local bv = Instance.new("BodyVelocity")
-    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    bv.Velocity = Vector3.new((math.random()-0.5)*power, power, (math.random()-0.5)*power)
+    bv.Name = "ShadowFling"
     bv.Parent = targetHRP
+    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bv.Velocity = Vector3.new(9e8, 9e8, 9e8)
     local bav = Instance.new("BodyAngularVelocity")
-    bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    bav.AngularVelocity = Vector3.new(999, 999, 999)
+    bav.Name = "ShadowFlingAng"
     bav.Parent = targetHRP
-    local bf = Instance.new("BodyForce")
-    bf.Force = Vector3.new(0, power*500, 0)
-    bf.Parent = targetHRP
-    task.delay(1, function()
-        pcall(function() bv:Destroy() end)
-        pcall(function() bav:Destroy() end)
-        pcall(function() bf:Destroy() end)
-        if targetHum then pcall(function() targetHum.PlatformStand = false end) end
+    bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    bav.AngularVelocity = Vector3.new(9e8, 9e8, 9e8)
+    pcall(function() targetHum.PlatformStand = true end)
+    task.delay(1.2, function()
+        if bv and bv.Parent then bv:Destroy() end
+        if bav and bav.Parent then bav:Destroy() end
+        if targetHum and targetHum.Parent then pcall(function() targetHum.PlatformStand = false end) end
     end)
+    return true
+end
+
+local function flingAllPlayers()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and isPlayerAlive(plr) then
+            flingPlayerReal(plr)
+            task.wait(0.08)
+        end
+    end
+    notify("Shadow HUB", "Fling All", 2)
+end
+
+local function flingRole(roleFilter)
+    local count = 0
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and isPlayerAlive(plr) and getRole(plr) == roleFilter then
+            if flingPlayerReal(plr) then count = count + 1 end
+            task.wait(0.1)
+        end
+    end
+    notify("Shadow HUB", "Fling " .. roleFilter .. ": " .. count, 2)
+end
+
+local function flingPlayerByName(name)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Name == name and plr ~= player and isPlayerAlive(plr) then
+            if flingPlayerReal(plr) then
+                notify("Shadow HUB", "Fling: " .. name, 2)
+                return
+            end
+        end
+    end
+    notify("Shadow HUB", "Jogador não encontrado", 2)
+end
+
+local function flingNearest()
+    local hrp = getHRP()
+    if not hrp then return end
+    local nearest, nearestDist = nil, math.huge
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr == player then continue end
+        if not isPlayerAlive(plr) then continue end
+        if plr.Character then
+            local thrp = plr.Character:FindFirstChild("HumanoidRootPart")
+            if thrp then
+                local d = (hrp.Position - thrp.Position).Magnitude
+                if d < nearestDist then nearestDist = d nearest = plr end
+            end
+        end
+    end
+    if nearest then flingPlayerReal(nearest) end
+end
+
+local function bringPlayer(targetName)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Name == targetName and plr.Character and isPlayerAlive(plr) then
+            local thrp = plr.Character:FindFirstChild("HumanoidRootPart")
+            local myHrp = getHRP()
+            if thrp and myHrp then
+                pcall(function() thrp:SetNetworkOwner(player) end)
+                task.wait(0.02)
+                thrp.CFrame = myHrp.CFrame + Vector3.new(0, 3, 0)
+            end
+        end
+    end
+end
+
+local stunActive = false
+local function stunAll()
+    if stunActive then return end
+    stunActive = true
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr == player then continue end
+        if not isPlayerAlive(plr) then continue end
+        if plr.Character then
+            local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+            local hum = plr.Character:FindFirstChild("Humanoid")
+            if hrp and hum then
+                pcall(function() hrp:SetNetworkOwner(player) end)
+                task.wait(0.01)
+                pcall(function()
+                    local bv = Instance.new("BodyVelocity")
+                    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                    bv.Velocity = Vector3.new(0,0,0)
+                    bv.Parent = hrp
+                    hum.WalkSpeed = 0 hum.JumpPower = 0
+                    task.delay(3, function()
+                        pcall(function() bv:Destroy() end)
+                        if hum then hum.WalkSpeed = 16 hum.JumpPower = 50 end
+                        stunActive = false
+                    end)
+                end)
+            end
+        end
+    end
 end
 
 -- ============ DETECTORES ============
@@ -1216,7 +1296,7 @@ local function stopGodModeOP()
     end
 end
 
--- ============ RESTO ============
+-- ============ PROTECTIONS / MISC ============
 local function startGodMode()
     if state.godConn then return end
     state.godConn = RunService.Heartbeat:Connect(function()
@@ -1373,86 +1453,7 @@ local function startKillAura()
     end)
 end
 
-local function startFlingAll()
-    if state.flingConn then return end
-    state.flingConn = RunService.Heartbeat:Connect(function()
-        if not CONFIG.FlingEnabled then return end
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr == player then continue end
-            if not isPlayerAlive(plr) then continue end
-            if plr.Character then
-                flingPlayer(plr.Character, CONFIG.FlingPower)
-                task.wait(0.15)
-            end
-        end
-    end)
-end
-local function stopFlingAll()
-    if state.flingConn then state.flingConn:Disconnect() state.flingConn = nil end
-end
-
-local function flingNearest()
-    local hrp = getHRP()
-    if not hrp then return end
-    local nearest, nearestDist = nil, math.huge
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr == player then continue end
-        if not isPlayerAlive(plr) then continue end
-        if plr.Character then
-            local thrp = plr.Character:FindFirstChild("HumanoidRootPart")
-            if thrp then
-                local d = (hrp.Position - thrp.Position).Magnitude
-                if d < nearestDist then nearestDist = d nearest = plr.Character end
-            end
-        end
-    end
-    if nearest then flingPlayer(nearest, CONFIG.FlingPower) end
-end
-
-local function bringPlayer(targetName)
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr.Name == targetName and plr.Character and isPlayerAlive(plr) then
-            local thrp = plr.Character:FindFirstChild("HumanoidRootPart")
-            local myHrp = getHRP()
-            if thrp and myHrp then
-                pcall(function() thrp:SetNetworkOwner(player) end)
-                task.wait(0.02)
-                thrp.CFrame = myHrp.CFrame + Vector3.new(0, 3, 0)
-            end
-        end
-    end
-end
-
-local stunActive = false
-local function stunAll()
-    if stunActive then return end
-    stunActive = true
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr == player then continue end
-        if not isPlayerAlive(plr) then continue end
-        if plr.Character then
-            local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-            local hum = plr.Character:FindFirstChild("Humanoid")
-            if hrp and hum then
-                pcall(function() hrp:SetNetworkOwner(player) end)
-                task.wait(0.01)
-                pcall(function()
-                    local bv = Instance.new("BodyVelocity")
-                    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                    bv.Velocity = Vector3.new(0,0,0)
-                    bv.Parent = hrp
-                    hum.WalkSpeed = 0 hum.JumpPower = 0
-                    task.delay(3, function()
-                        pcall(function() bv:Destroy() end)
-                        if hum then hum.WalkSpeed = 16 hum.JumpPower = 50 end
-                        stunActive = false
-                    end)
-                end)
-            end
-        end
-    end
-end
-
+-- ============ FLY ============
 local function startFly()
     local hrp = getHRP()
     if not hrp then return end
@@ -1493,6 +1494,7 @@ local function stopFly()
     if state.flyConn then state.flyConn:Disconnect() state.flyConn = nil end
 end
 
+-- ============ NOCLIP / INFJUMP / SPEED ============
 local function toggleNoclip(e)
     if state.noclipConn then state.noclipConn:Disconnect() state.noclipConn = nil end
     if not e then return end
@@ -1515,90 +1517,70 @@ local function toggleInfJump(e)
     end)
 end
 
--- ============ SPEED (100% desliga) ============
 local function applyWalkSpeed(s)
-    -- Sempre desconecta o loop anterior primeiro
     if state.speedConn then
         state.speedConn:Disconnect()
         state.speedConn = nil
     end
-    -- Se desabilitado, força WalkSpeed = 16 e retorna
     if not CONFIG.WalkSpeedEnabled then
         local hum = getHum()
         if hum then hum.WalkSpeed = 16 end
         return
     end
-    -- Habilitado: loop com check INTERNO de CONFIG.WalkSpeedEnabled
     local target = s
     state.speedConn = RunService.Heartbeat:Connect(function()
-        -- Auto-destruição se flag mudou (proteção contra Disconnect que falha)
         if not CONFIG.WalkSpeedEnabled then
-            if state.speedConn then
-                state.speedConn:Disconnect()
-                state.speedConn = nil
-            end
+            if state.speedConn then state.speedConn:Disconnect() state.speedConn = nil end
             local hum = getHum()
             if hum then hum.WalkSpeed = 16 end
             return
         end
         local hum = getHum()
-        if hum and hum.WalkSpeed ~= target then
-            hum.WalkSpeed = target
-        end
+        if hum and hum.WalkSpeed ~= target then hum.WalkSpeed = target end
     end)
 end
 
--- ============ INVISIBLE (100% funciona) ============
+-- ============ INVISIBLE REAL ============
 local function startInvisible()
-    local char = player.Character
-    if not char then return end
-    -- Salva transparências originais (ex: HumanoidRootPart já é 1 por padrão)
+    if state.invisibleConn then state.invisibleConn:Disconnect() state.invisibleConn = nil end
     state.invisibleOriginals = {}
-    for _, p in ipairs(char:GetDescendants()) do
-        if p:IsA("BasePart") then
-            state.invisibleOriginals[p] = p.Transparency
+    local char = player.Character
+    if char then
+        for _, p in ipairs(char:GetDescendants()) do
+            if p:IsA("BasePart") then state.invisibleOriginals[p] = p.Transparency end
         end
     end
-    -- Para o loop anterior se existir
-    if state.invisibleConn then
-        state.invisibleConn:Disconnect()
-        state.invisibleConn = nil
-    end
-    -- Loop que re-aplica invisibilidade continuamente
     state.invisibleConn = RunService.Heartbeat:Connect(function()
         if not CONFIG.Invisible then
-            if state.invisibleConn then
-                state.invisibleConn:Disconnect()
-                state.invisibleConn = nil
-            end
+            if state.invisibleConn then state.invisibleConn:Disconnect() state.invisibleConn = nil end
             return
         end
         local c = player.Character
         if not c then return end
-        for _, p in ipairs(c:GetDescendants()) do
-            if p:IsA("BasePart") then
-                p.Transparency = 1
-                p.LocalTransparencyModifier = 1
+        for _, part in ipairs(c:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.Transparency = 1
+                part.LocalTransparencyModifier = 1
+            elseif part:IsA("Accessory") and part:FindFirstChild("Handle") then
+                part.Handle.Transparency = 1
+                part.Handle.LocalTransparencyModifier = 1
             end
         end
     end)
 end
 
 local function stopInvisible()
-    if state.invisibleConn then
-        state.invisibleConn:Disconnect()
-        state.invisibleConn = nil
-    end
+    if state.invisibleConn then state.invisibleConn:Disconnect() state.invisibleConn = nil end
     local char = player.Character
-    if not char then
-        state.invisibleOriginals = {}
-        return
-    end
+    if not char then state.invisibleOriginals = {} return end
     for _, p in ipairs(char:GetDescendants()) do
         if p:IsA("BasePart") then
             local orig = state.invisibleOriginals[p]
             p.Transparency = (orig ~= nil) and orig or 0
             p.LocalTransparencyModifier = 0
+        elseif p:IsA("Accessory") and p:FindFirstChild("Handle") then
+            p.Handle.Transparency = 0
+            p.Handle.LocalTransparencyModifier = 0
         end
     end
     state.invisibleOriginals = {}
@@ -1608,6 +1590,7 @@ local function toggleInvisible(e)
     if e then startInvisible() else stopInvisible() end
 end
 
+-- ============ FULLBRIGHT / CLICK TP ============
 local function toggleFullbright(e)
     if e then
         state.fullbrightRestore = {Ambient=Lighting.Ambient, OutdoorAmbient=Lighting.OutdoorAmbient, Brightness=Lighting.Brightness, ClockTime=Lighting.ClockTime, FogEnd=Lighting.FogEnd}
@@ -1638,6 +1621,7 @@ local function startClickTP()
     end)
 end
 
+-- ============ DODGE ============
 local function startDodgeKnife()
     if state.dodgeKnifeConn then return end
     state.dodgeKnifeConn = Workspace.DescendantAdded:Connect(function(obj)
@@ -1701,6 +1685,7 @@ local function stopDodgeBullet()
     if state.dodgeBulletConn then state.dodgeBulletConn:Disconnect() state.dodgeBulletConn = nil end
 end
 
+-- ============ ESP ============
 local function createESP(obj, color, text, isPlayer)
     if obj:FindFirstChild("ShadowESP_Label") then return end
     local bb = Instance.new("BillboardGui")
@@ -1805,6 +1790,7 @@ local function stopGunESPLoop()
     if state.gunESPConn then state.gunESPConn:Disconnect() state.gunESPConn = nil end
 end
 
+-- ============ AUTO GUN ============
 local function hasGunAlready()
     local char = player.Character
     if char and char:FindFirstChild("Gun") then return true end
@@ -1849,6 +1835,7 @@ local function autoEquip()
     end
 end
 
+-- ============ MISC SHORTCUTS ============
 local function speedGlitch()
     local hum = getHum()
     if not hum then return end
@@ -1973,6 +1960,7 @@ local function applyUserSkin(userId)
     if hum then hum.WalkSpeed = savedSpeed if savedJump then hum.JumpPower = savedJump end end
 end
 
+-- ============ AI MODES ============
 local function startAIPlay()
     if state.aiPlayConn then return end
     state.aiPlayConn = RunService.Heartbeat:Connect(function()
@@ -2188,21 +2176,7 @@ player.Idled:Connect(function()
     end
 end)
 
--- ============ HALLOWEEN 2026 — CANDY FARM ============
-local candyState = {
-    conn = nil, tween = nil, count = 0, lastScan = 0, lastNotifyMilestone = 0,
-}
-
-local function isCandyPart(obj)
-    if not obj or not obj.Parent then return false end
-    if not obj:IsA("BasePart") then return false end
-    if obj.Name:lower():find("candy") then return true end
-    local p = obj.Parent
-    if p and p.Name == "CandyHolder" then return true end
-    if p and p.Name == "Candy" then return true end
-    return false
-end
-
+-- ============ CANDY FARM REAL ============
 local function getCandyHolder()
     local names = {"CandyHolder", "Candies", "Candy", "HalloweenCandy"}
     for _, n in ipairs(names) do
@@ -2219,83 +2193,37 @@ local function getCandyHolder()
     return nil
 end
 
-local function getCandyList()
-    local list = {}
-    local myHrp = getHRP()
-    if not myHrp then return list end
+local function collectCandiesReal()
     local holder = getCandyHolder()
-    local source = holder or Workspace
-    for _, obj in ipairs(source:GetDescendants()) do
-        if isCandyPart(obj) then
-            table.insert(list, {part = obj, dist = (myHrp.Position - obj.Position).Magnitude})
-        end
-    end
-    table.sort(list, function(a, b) return a.dist < b.dist end)
-    return list
-end
-
-local function setNoclipParts(enable)
-    local char = player.Character
-    if not char then return end
-    for _, p in ipairs(char:GetDescendants()) do
-        if p:IsA("BasePart") then p.CanCollide = not enable end
-    end
-end
-
-local function tweenToCandy(candyPart, speed)
-    if not candyPart or not candyPart.Parent then return false end
+    if not holder then return 0 end
     local hrp = getHRP()
-    if not hrp then return false end
-    if candyState.tween then
-        pcall(function() candyState.tween:Cancel() end)
-        candyState.tween = nil
-    end
-    setNoclipParts(true)
-    local startPos = hrp.Position
-    local dist = (startPos - candyPart.Position).Magnitude
-    local duration = math.clamp(dist / math.max(speed, 1), 0.15, 8)
-    local ti = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-    local target = CFrame.new(candyPart.Position + Vector3.new(0, 1, 0))
-    candyState.tween = TweenService:Create(hrp, ti, {CFrame = target})
-    candyState.tween:Play()
-    local ok = pcall(function() candyState.tween.Completed:Wait() end)
-    candyState.tween = nil
-    setNoclipParts(false)
-    return ok and candyPart.Parent ~= nil
-end
-
-local function collectCandiesOnce()
-    local list = getCandyList()
-    if #list == 0 then return 0 end
+    if not hrp then return 0 end
     local collected = 0
-    for _, entry in ipairs(list) do
-        if not CONFIG.AutoCandy then break end
-        if entry.part and entry.part.Parent then
-            local ok = tweenToCandy(entry.part, CONFIG.CandyTweenSpeed)
-            if ok then
-                collected = collected + 1
-                candyState.count = candyState.count + 1
-                if candyState.count - candyState.lastNotifyMilestone >= 10 then
-                    candyState.lastNotifyMilestone = candyState.count
-                    notify("Shadow HUB", "🍬 " .. candyState.count .. " doces", 2)
+    local events = ReplicatedStorage:FindFirstChild("Events")
+    local updateEvent = events and events:FindFirstChild("UpdateData")
+    for _, candy in ipairs(holder:GetChildren()) do
+        if not CONFIG.AutoCandy and collected > 0 then break end
+        if candy:IsA("BasePart") then
+            hrp.CFrame = candy.CFrame
+            task.wait(0.08)
+            if updateEvent then pcall(function() updateEvent:InvokeServer() end) end
+            collected = collected + 1
+            state.candyCount = state.candyCount + 1
+            if state.candyCount - state.candyLastNotify >= 10 then
+                state.candyLastNotify = state.candyCount
+                notify("Shadow HUB", "🍬 " .. state.candyCount .. " doces", 2)
+            end
+            if CONFIG.CandyResetAfter > 0 and state.candyCount >= CONFIG.CandyResetAfter then
+                state.candyCount = 0
+                state.candyLastNotify = 0
+                notify("Shadow HUB", "🍬 Reset (" .. CONFIG.CandyResetAfter .. ")", 3)
+                local hum = getHum()
+                if hum then
+                    pcall(function() hum.Health = 0 end)
+                    pcall(function() hum:TakeDamage(hum.MaxHealth * 2) end)
                 end
-                if CONFIG.CandyResetAfter > 0 and candyState.count >= CONFIG.CandyResetAfter then
-                    candyState.count = 0
-                    candyState.lastNotifyMilestone = 0
-                    notify("Shadow HUB", "🍬 Reset (" .. CONFIG.CandyResetAfter .. ")", 3)
-                    if candyState.tween then
-                        pcall(function() candyState.tween:Cancel() end)
-                        candyState.tween = nil
-                    end
-                    setNoclipParts(false)
-                    local hum = getHum()
-                    if hum then
-                        pcall(function() hum.Health = 0 end)
-                        pcall(function() hum:TakeDamage(hum.MaxHealth * 2) end)
-                    end
-                    task.wait(2.5)
-                    break
-                end
+                task.wait(2.5)
+                break
             end
         end
     end
@@ -2303,30 +2231,21 @@ local function collectCandiesOnce()
 end
 
 local function startCandyFarm()
-    if candyState.conn then return end
-    candyState.conn = task.spawn(function()
+    if state.candyConn then return end
+    state.candyConn = task.spawn(function()
         while CONFIG.AutoCandy do
             if not getHRP() then task.wait(0.5) continue end
-            local now = tick()
-            if now - candyState.lastScan >= 0.3 then
-                candyState.lastScan = now
-                collectCandiesOnce()
-            end
-            task.wait(0.1)
+            collectCandiesReal()
+            task.wait(0.2)
         end
     end)
 end
 
 local function stopCandyFarm()
-    if candyState.conn then
-        pcall(function() task.cancel(candyState.conn) end)
-        candyState.conn = nil
+    if state.candyConn then
+        pcall(function() task.cancel(state.candyConn) end)
+        state.candyConn = nil
     end
-    if candyState.tween then
-        pcall(function() candyState.tween:Cancel() end)
-        candyState.tween = nil
-    end
-    setNoclipParts(false)
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj.Name == "ShadowCandyESP" then obj:Destroy() end
     end
@@ -2338,9 +2257,9 @@ local function updateCandyESP()
     end
     if not CONFIG.CandyESP then return end
     local holder = getCandyHolder()
-    local source = holder or Workspace
-    for _, obj in ipairs(source:GetDescendants()) do
-        if isCandyPart(obj) then
+    if not holder then return end
+    for _, obj in ipairs(holder:GetDescendants()) do
+        if obj:IsA("BasePart") then
             local bb = Instance.new("BillboardGui")
             bb.Name = "ShadowCandyESP"
             bb.Size = UDim2.new(0, 80, 0, 40)
@@ -2387,6 +2306,70 @@ local function stopAutoWinSurvivor()
     if hrp then hrp.Anchored = false end
 end
 
+-- ============ TROLL PACK ============
+local function freezeAll()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and isPlayerAlive(plr) then
+            local char = plr.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChild("Humanoid")
+            if hrp and hum then
+                pcall(function() hrp.Anchored = true end)
+                pcall(function() hum.WalkSpeed = 0 end)
+                task.delay(5, function()
+                    if hrp and hrp.Parent then pcall(function() hrp.Anchored = false end) end
+                    if hum and hum.Parent then pcall(function() hum.WalkSpeed = 16 end) end
+                end)
+            end
+        end
+    end
+    notify("Shadow HUB", "Freeze All (5s)", 2)
+end
+
+local function tpAllToMe()
+    local myHrp = getHRP()
+    if not myHrp then return end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and isPlayerAlive(plr) then
+            local char = plr.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                pcall(function() hrp.CFrame = myHrp.CFrame + Vector3.new(0, 3, 0) end)
+                task.wait(0.05)
+            end
+        end
+    end
+    notify("Shadow HUB", "TP All to Me", 2)
+end
+
+local function explodeAll()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and isPlayerAlive(plr) then
+            local char = plr.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                pcall(function()
+                    hrp.AssemblyLinearVelocity = Vector3.new(0, 5000, 0)
+                    hrp.AssemblyAngularVelocity = Vector3.new(5000, 5000, 5000)
+                end)
+                task.wait(0.05)
+            end
+        end
+    end
+    notify("Shadow HUB", "Explode All", 2)
+end
+
+local function sitAll()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and isPlayerAlive(plr) then
+            local char = plr.Character
+            local hum = char and char:FindFirstChild("Humanoid")
+            if hum then pcall(function() hum.Sit = true end) end
+        end
+    end
+    notify("Shadow HUB", "Sit All", 2)
+end
+
 -- ============ LOOPS ============
 task.spawn(function()
     while true do task.wait(0.5) if CONFIG.AutoCollectGun then collectGunWithReturn() end end
@@ -2418,8 +2401,8 @@ end)
 
 -- ============ UI ============
 local Window = Rayfield:CreateWindow({
-    Name = "Shadow HUB | MM2 v5.8",
-    LoadingTitle = "Shadow HUB v5.8",
+    Name = "Shadow HUB | MM2 v5.9.2",
+    LoadingTitle = "Shadow HUB v5.9.2",
     LoadingSubtitle = "by [K]vk for Kovak",
     Theme = "DarkBlue",
     ToggleUIKeybind = "K",
@@ -2432,10 +2415,8 @@ local Window = Rayfield:CreateWindow({
 -- Main
 local MainTab = Window:CreateTab("Main", 4483362458)
 MainTab:CreateSection("Auto Collect Gun")
-MainTab:CreateToggle({ Name = "Auto Collect Gun", CurrentValue = false, Flag = "AutoGun",
-    Callback = function(v) CONFIG.AutoCollectGun = v end })
-MainTab:CreateToggle({ Name = "Voltar Após Coletar", CurrentValue = true, Flag = "GunReturn",
-    Callback = function(v) CONFIG.GunReturnAfterCollect = v end })
+MainTab:CreateToggle({ Name = "Auto Collect Gun", CurrentValue = false, Flag = "AutoGun", Callback = function(v) CONFIG.AutoCollectGun = v end })
+MainTab:CreateToggle({ Name = "Voltar Após Coletar", CurrentValue = true, Flag = "GunReturn", Callback = function(v) CONFIG.GunReturnAfterCollect = v end })
 MainTab:CreateButton({ Name = "Coletar Agora (manual)", Callback = function() collectGunWithReturn() end })
 MainTab:CreateSection("Teleport")
 MainTab:CreateButton({ Name = "TP para Murderer", Callback = tpToMurderer })
@@ -2447,27 +2428,21 @@ MainTab:CreateButton({ Name = "↩️ Voltar", Callback = returnToSaved })
 -- Kill System
 local KillTab = Window:CreateTab("Kill System", 4483362458)
 KillTab:CreateSection("🎯 LONG KILL (através da parede)")
-KillTab:CreateToggle({
-    Name = "🎯 Long Kill (Knife OU Gun)",
-    CurrentValue = false, Flag = "LongKill",
+KillTab:CreateToggle({ Name = "🎯 Long Kill", CurrentValue = false, Flag = "LongKill",
     Callback = function(v)
         CONFIG.LongKillMurderer = v
         if v then
             local role = getMyRole()
             if role ~= "Murderer" and role ~= "Sheriff" then
-                notify("Shadow HUB", "⚠ Você precisa ser Murderer ou Sheriff", 3)
-            else
-                notify("Shadow HUB", "Long Kill ativo (role: " .. role .. ")", 3)
-            end
+                notify("Shadow HUB", "⚠ Precisa ser Murderer ou Sheriff", 3)
+            else notify("Shadow HUB", "Long Kill ativo (" .. role .. ")", 3) end
             startLongKill()
         else stopLongKill() end
     end
 })
-KillTab:CreateLabel("Não move player — só o Handle da arma")
-KillTab:CreateLabel("Ignora quem já morreu/espectando")
-KillTab:CreateDropdown({
-    Name = "Alvo (Role)",
-    Options = {"Automático", "Murderer", "Sheriff", "Innocent", "Qualquer"},
+KillTab:CreateLabel("Não move player — só Handle da arma")
+KillTab:CreateLabel("Ignora mortos/espectando")
+KillTab:CreateDropdown({ Name = "Alvo (Role)", Options = {"Automático", "Murderer", "Sheriff", "Innocent", "Qualquer"},
     CurrentOption = {"Automático"}, Flag = "LongKillTarget",
     Callback = function(opt)
         local v = opt[1]
@@ -2478,76 +2453,45 @@ KillTab:CreateDropdown({
 })
 KillTab:CreateSlider({ Name = "Delay", Range = {0.1, 2}, Increment = 0.05, Suffix = "s",
     CurrentValue = 0.5, Flag = "LongKillDelay", Callback = function(v) CONFIG.LongKillDelay = v end })
-KillTab:CreateButton({
-    Name = "🎯 Matar Agora (longe)",
-    Callback = function()
-        local role = CONFIG.LongKillTargetRole
-        if role == "auto" then role = resolveLongKillTarget() end
-        local ok, msg = killLongRange(role)
-        notify("Shadow HUB", ok and "✓ Matou!" or ("✗ " .. (msg or "falha")), 3)
-    end
-})
-KillTab:CreateButton({
-    Name = "☠️ Matar TODOS Vivos Agora",
-    Callback = function()
-        local killed = killAllAlive()
-        notify("Shadow HUB", "Matou " .. killed .. " jogadores vivos", 4)
-    end
-})
-KillTab:CreateSection("⚔️ REAL KILL (colado)")
-KillTab:CreateToggle({
-    Name = "Real Kill", CurrentValue = false, Flag = "RealKill",
-    Callback = function(v)
-        CONFIG.RealKill = v
-        if v then startRealKill() else stopRealKill() end
-    end
-})
-KillTab:CreateSlider({ Name = "Real Kill Delay", Range = {0.05, 1}, Increment = 0.01, Suffix = "s",
+KillTab:CreateButton({ Name = "🎯 Matar Agora (longe)", Callback = function()
+    local role = CONFIG.LongKillTargetRole
+    if role == "auto" then role = resolveLongKillTarget() end
+    local ok, msg = killLongRange(role)
+    notify("Shadow HUB", ok and "✓ Matou!" or ("✗ " .. (msg or "falha")), 3)
+end })
+KillTab:CreateButton({ Name = "☠️ Matar TODOS Vivos", Callback = function()
+    local killed = killAllAlive()
+    notify("Shadow HUB", "Matou " .. killed, 4)
+end })
+KillTab:CreateSection("⚔️ REAL KILL")
+KillTab:CreateToggle({ Name = "Real Kill", CurrentValue = false, Flag = "RealKill",
+    Callback = function(v) CONFIG.RealKill = v if v then startRealKill() else stopRealKill() end end })
+KillTab:CreateSlider({ Name = "Delay", Range = {0.05, 1}, Increment = 0.01, Suffix = "s",
     CurrentValue = 0.15, Flag = "RealKillDelay", Callback = function(v) CONFIG.RealKillDelay = v end })
 
 -- Animation
 local AnimTab = Window:CreateTab("Animation", 4483362458)
 AnimTab:CreateSection("🎬 Animação de Andar")
-AnimTab:CreateDropdown({
-    Name = "Preset de Animação",
+AnimTab:CreateDropdown({ Name = "Preset",
     Options = {"Default", "Zombie", "Ninja", "Astronaut", "Levitate", "Cartwheel", "Ghost", "Sneak", "Superhero", "Werewolf", "Stylish"},
     CurrentOption = {"Default"}, Flag = "AnimPreset",
-    Callback = function(opt)
-        applyAnimation(opt[1])
-        notify("Shadow HUB", "🎬 Animação: " .. opt[1], 2)
-    end
-})
-AnimTab:CreateButton({
-    Name = "🔄 Resetar Animação",
-    Callback = function()
-        applyAnimation("Default")
-        notify("Shadow HUB", "Animação resetada", 2)
-    end
-})
-AnimTab:CreateLabel("Aplica pack oficial (walk/idle/run)")
-AnimTab:CreateLabel("Replicado pra todos (server-visible)")
+    Callback = function(opt) applyAnimation(opt[1]) notify("Shadow HUB", "🎬 " .. opt[1], 2) end })
+AnimTab:CreateButton({ Name = "🔄 Resetar", Callback = function() applyAnimation("Default") notify("Shadow HUB", "Resetado", 2) end })
 
 -- Emotes
 local EmoteTab = Window:CreateTab("Emotes", 4483362458)
-EmoteTab:CreateSection("🎭 Emotes (replicados)")
-EmoteTab:CreateDropdown({
-    Name = "Escolher Emote",
+EmoteTab:CreateSection("🎭 Emotes")
+EmoteTab:CreateDropdown({ Name = "Escolher",
     Options = {"Nenhum", "Fake Death", "Dance", "Dance 2", "Dance 3", "Wave", "Point", "Sit", "Lay", "Jump", "Karate", "Cheer", "Backflip", "Sprint"},
     CurrentOption = {"Nenhum"}, Flag = "EmoteSelect",
-    Callback = function(opt)
-        if opt[1] ~= "Nenhum" then playEmote(opt[1])
-        else stopEmoteNow() end
-    end
-})
-EmoteTab:CreateButton({ Name = "🛑 Parar Emote", Callback = stopEmoteNow })
+    Callback = function(opt) if opt[1] ~= "Nenhum" then playEmote(opt[1]) else stopEmoteNow() end end })
+EmoteTab:CreateButton({ Name = "🛑 Parar", Callback = stopEmoteNow })
 EmoteTab:CreateSection("🎬 Atalhos")
 EmoteTab:CreateButton({ Name = "💀 Fake Death", Callback = function() playEmote("Fake Death") end })
 EmoteTab:CreateButton({ Name = "🕺 Dance", Callback = function() playEmote("Dance") end })
 EmoteTab:CreateButton({ Name = "👋 Wave", Callback = function() playEmote("Wave") end })
 EmoteTab:CreateButton({ Name = "🤸 Backflip", Callback = function() playEmote("Backflip") end })
-EmoteTab:CreateButton({ Name = "⬆️ Jump", Callback = function() playEmote("Jump") end })
 EmoteTab:CreateButton({ Name = "🥋 Karate", Callback = function() playEmote("Karate") end })
-EmoteTab:CreateButton({ Name = "🎉 Cheer", Callback = function() playEmote("Cheer") end })
 
 -- Auto Win
 local AWTab = Window:CreateTab("Auto Win", 4483362458)
@@ -2555,54 +2499,42 @@ AWTab:CreateToggle({ Name = "🏆 Auto Win Sheriff", CurrentValue = false, Flag 
     Callback = function(v)
         CONFIG.AutoWinSheriff = v
         if v then
-            if getMyRole() ~= "Sheriff" then notify("Shadow HUB", "⚠ Você não é Sheriff", 3) end
+            if getMyRole() ~= "Sheriff" then notify("Shadow HUB", "⚠ Não é Sheriff", 3) end
             startAutoWinSheriff()
         else stopAutoWinSheriff() end
-    end })
+    end
+})
 AWTab:CreateToggle({ Name = "🏆 Auto Win Murderer", CurrentValue = false, Flag = "AutoWinMurderer",
     Callback = function(v)
         CONFIG.AutoWinMurderer = v
         if v then
-            if getMyRole() ~= "Murderer" then notify("Shadow HUB", "⚠ Você não é Murderer", 3) end
+            if getMyRole() ~= "Murderer" then notify("Shadow HUB", "⚠ Não é Murderer", 3) end
             startAutoWinMurderer()
         else stopAutoWinMurderer() end
-    end })
+    end
+})
 AWTab:CreateButton({ Name = "🔍 Verificar Role", Callback = function() notify("Shadow HUB", "Role: " .. getMyRole(), 4) end })
 
 -- AI Play
 local AITab = Window:CreateTab("AI Play", 4483362458)
-AITab:CreateToggle({ Name = "AI Play", CurrentValue = false, Flag = "AIPlay",
-    Callback = function(v) CONFIG.AIPlay = v if v then startAIPlay() else stopAIPlay() end end })
-AITab:CreateToggle({ Name = "Auto Jump Flee", CurrentValue = false, Flag = "AutoJumpFlee",
-    Callback = function(v) CONFIG.AutoJumpFlee = v if v then startAutoJumpFlee() else stopAutoJumpFlee() end end })
-AITab:CreateToggle({ Name = "Auto Shoot Sheriff", CurrentValue = false, Flag = "AutoShootSheriff",
-    Callback = function(v) CONFIG.AutoShootSheriff = v if v then startAutoShootSheriff() else stopAutoShootSheriff() end end })
-AITab:CreateToggle({ Name = "Predictive Aim", CurrentValue = false, Flag = "PredictiveAim",
-    Callback = function(v) CONFIG.PredictiveAim = v if v then startPredictiveAim() else stopPredictiveAim() end end })
-AITab:CreateToggle({ Name = "Panic Mode", CurrentValue = false, Flag = "PanicMode",
-    Callback = function(v) CONFIG.PanicMode = v if v then startPanicMode() else stopPanicMode() end end })
-AITab:CreateToggle({ Name = "Dodge Pro", CurrentValue = false, Flag = "DodgePro",
-    Callback = function(v) CONFIG.DodgePro = v if v then startDodgePro() else stopDodgePro() end end })
-AITab:CreateToggle({ Name = "Stealth Mode", CurrentValue = false, Flag = "StealthMode",
-    Callback = function(v) CONFIG.StealthMode = v if v then startStealthMode() else stopStealthMode() end end })
-AITab:CreateToggle({ Name = "Anti Camp", CurrentValue = false, Flag = "AntiCamp",
-    Callback = function(v) CONFIG.AntiCamp = v if v then startAntiCamp() else stopAntiCamp() end end })
-AITab:CreateToggle({ Name = "Troll Mode", CurrentValue = false, Flag = "TrollMode",
-    Callback = function(v) CONFIG.TrollMode = v if v then startTrollMode() else stopTrollMode() end end })
-AITab:CreateToggle({ Name = "Death Invisible", CurrentValue = false, Flag = "DeathInvisible",
-    Callback = function(v) CONFIG.DeathInvisible = v if v then startDeathInvisible() end end })
+AITab:CreateToggle({ Name = "AI Play", CurrentValue = false, Flag = "AIPlay", Callback = function(v) CONFIG.AIPlay = v if v then startAIPlay() else stopAIPlay() end end })
+AITab:CreateToggle({ Name = "Auto Jump Flee", CurrentValue = false, Flag = "AutoJumpFlee", Callback = function(v) CONFIG.AutoJumpFlee = v if v then startAutoJumpFlee() else stopAutoJumpFlee() end end })
+AITab:CreateToggle({ Name = "Auto Shoot Sheriff", CurrentValue = false, Flag = "AutoShootSheriff", Callback = function(v) CONFIG.AutoShootSheriff = v if v then startAutoShootSheriff() else stopAutoShootSheriff() end end })
+AITab:CreateToggle({ Name = "Predictive Aim", CurrentValue = false, Flag = "PredictiveAim", Callback = function(v) CONFIG.PredictiveAim = v if v then startPredictiveAim() else stopPredictiveAim() end end })
+AITab:CreateToggle({ Name = "Panic Mode", CurrentValue = false, Flag = "PanicMode", Callback = function(v) CONFIG.PanicMode = v if v then startPanicMode() else stopPanicMode() end end })
+AITab:CreateToggle({ Name = "Dodge Pro", CurrentValue = false, Flag = "DodgePro", Callback = function(v) CONFIG.DodgePro = v if v then startDodgePro() else stopDodgePro() end end })
+AITab:CreateToggle({ Name = "Stealth Mode", CurrentValue = false, Flag = "StealthMode", Callback = function(v) CONFIG.StealthMode = v if v then startStealthMode() else stopStealthMode() end end })
+AITab:CreateToggle({ Name = "Anti Camp", CurrentValue = false, Flag = "AntiCamp", Callback = function(v) CONFIG.AntiCamp = v if v then startAntiCamp() else stopAntiCamp() end end })
+AITab:CreateToggle({ Name = "Troll Mode", CurrentValue = false, Flag = "TrollMode", Callback = function(v) CONFIG.TrollMode = v if v then startTrollMode() else stopTrollMode() end end })
+AITab:CreateToggle({ Name = "Death Invisible", CurrentValue = false, Flag = "DeathInvisible", Callback = function(v) CONFIG.DeathInvisible = v if v then startDeathInvisible() end end })
 
 -- Suspeitos
 local SuspTab = Window:CreateTab("Suspeitos", 4483362458)
-SuspTab:CreateToggle({ Name = "Detector", CurrentValue = true, Flag = "DetectSusp",
-    Callback = function(v) CONFIG.DetectSuspicious = v end })
-SuspTab:CreateToggle({ Name = "Notificar", CurrentValue = true, Flag = "NotifySusp",
-    Callback = function(v) CONFIG.NotifySuspicious = v end })
-SuspTab:CreateToggle({ Name = "Detectar Team", CurrentValue = true, Flag = "DetectTeam",
-    Callback = function(v) CONFIG.DetectTeam = v end })
+SuspTab:CreateToggle({ Name = "Detector", CurrentValue = true, Flag = "DetectSusp", Callback = function(v) CONFIG.DetectSuspicious = v end })
+SuspTab:CreateToggle({ Name = "Notificar", CurrentValue = true, Flag = "NotifySusp", Callback = function(v) CONFIG.NotifySuspicious = v end })
+SuspTab:CreateToggle({ Name = "Detectar Team", CurrentValue = true, Flag = "DetectTeam", Callback = function(v) CONFIG.DetectTeam = v end })
 SuspTab:CreateSection("👁 Spectate")
-SuspTab:CreateDropdown({ Name = "Ver Tela", Options = getSuspiciousNames(), CurrentOption = {"Nenhum"},
-    Flag = "SpectateSuspect",
+SuspTab:CreateDropdown({ Name = "Ver Tela", Options = getSuspiciousNames(), CurrentOption = {"Nenhum"}, Flag = "SpectateSuspect",
     Callback = function(opt)
         if opt[1] ~= "Nenhum" then
             local name = opt[1]:match("^([^%s]+)")
@@ -2610,27 +2542,52 @@ SuspTab:CreateDropdown({ Name = "Ver Tela", Options = getSuspiciousNames(), Curr
                 if plr.Name == name then startSpectate(plr) break end
             end
         end
-    end })
+    end
+})
 SuspTab:CreateButton({ Name = "🚪 Sair do Espectador", Callback = stopSpectate })
 
 -- OP
 local OPTab = Window:CreateTab("OP", 4483362458)
-OPTab:CreateToggle({ Name = "Kill Aura", CurrentValue = false, Flag = "KillAura",
-    Callback = function(v) CONFIG.KillAura = v if v then startKillAura() end end })
+OPTab:CreateToggle({ Name = "Kill Aura", CurrentValue = false, Flag = "KillAura", Callback = function(v) CONFIG.KillAura = v if v then startKillAura() end end })
 OPTab:CreateButton({ Name = "⚡ Speed Glitch", Callback = speedGlitch })
 OPTab:CreateButton({ Name = "💥 Lag Switch", Callback = lagSwitch })
 
--- Fling
+-- FLING (NOVO)
 local FlingTab = Window:CreateTab("Fling", 4483362458)
-FlingTab:CreateToggle({ Name = "Fling All", CurrentValue = false, Flag = "FlingAll",
-    Callback = function(v) CONFIG.FlingEnabled = v if v then startFlingAll() else stopFlingAll() end end })
-FlingTab:CreateButton({ Name = "Fling Mais Próximo", Callback = flingNearest })
-FlingTab:CreateSlider({ Name = "Fling Power", Range = {100, 2000}, Increment = 50, CurrentValue = 500, Flag = "FlingPower",
-    Callback = function(v) CONFIG.FlingPower = v end })
-FlingTab:CreateDropdown({ Name = "Puxar Jogador", Options = getPlayerNames(), CurrentOption = {"Nenhum"}, Flag = "BringPlayer",
-    Callback = function(opt) if opt[1] ~= "Nenhum" then bringPlayer(opt[1]) end end })
-FlingTab:CreateButton({ Name = "Stun All (3s)", Callback = stunAll })
-FlingTab:CreateToggle({ Name = "Anti-Fling", CurrentValue = false, Flag = "AntiFling",
+FlingTab:CreateSection("💥 FLING REAL")
+FlingTab:CreateButton({ Name = "💥 Fling All Players", Callback = flingAllPlayers })
+FlingTab:CreateButton({ Name = "🔪 Fling Murderer", Callback = function() flingRole("Murderer") end })
+FlingTab:CreateButton({ Name = "🔫 Fling Sheriff", Callback = function() flingRole("Sheriff") end })
+FlingTab:CreateButton({ Name = "🎯 Fling Mais Próximo", Callback = flingNearest })
+FlingTab:CreateDropdown({ Name = "Fling Player (nome)",
+    Options = (function()
+        local names = {"Nenhum"}
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= player then table.insert(names, plr.Name) end
+        end
+        return names
+    end)(),
+    CurrentOption = {"Nenhum"},
+    Callback = function(opt)
+        if opt[1] ~= "Nenhum" then flingPlayerByName(opt[1]) end
+    end
+})
+FlingTab:CreateSection("🎯 Outros")
+FlingTab:CreateDropdown({ Name = "Puxar Jogador",
+    Options = (function()
+        local names = {"Nenhum"}
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= player then table.insert(names, plr.Name) end
+        end
+        return names
+    end)(),
+    CurrentOption = {"Nenhum"},
+    Callback = function(opt)
+        if opt[1] ~= "Nenhum" then bringPlayer(opt[1]) end
+    end
+})
+FlingTab:CreateButton({ Name = "⚡ Stun All (3s)", Callback = stunAll })
+FlingTab:CreateToggle({ Name = "🛡 Anti-Fling", CurrentValue = false, Flag = "AntiFling",
     Callback = function(v) CONFIG.AntiFling = v if v then startAntiFling() else stopAntiFling() end end })
 
 -- Fly
@@ -2649,32 +2606,34 @@ CombatTab:CreateToggle({ Name = "Perfect Aim", CurrentValue = false, Flag = "Per
     Callback = function(v) CONFIG.PerfectAim = v if v then startPerfectAim() else stopPerfectAim() end end })
 CombatTab:CreateToggle({ Name = "Auto Fire", CurrentValue = true, Flag = "PerfectAimFire",
     Callback = function(v) CONFIG.PerfectAimAutoFire = v if v and CONFIG.PerfectAim then startPerfectAimFire() else stopPerfectAimFire() end end })
-CombatTab:CreateToggle({ Name = "Predição", CurrentValue = true, Flag = "PerfectAimPredict",
-    Callback = function(v) CONFIG.PerfectAimPredict = v end })
-CombatTab:CreateToggle({ Name = "Travar no Alvo", CurrentValue = true, Flag = "PerfectAimLock",
-    Callback = function(v) CONFIG.PerfectAimLock = v end })
-CombatTab:CreateToggle({ Name = "Auto Equip Gun", CurrentValue = true, Flag = "AutoEquipGun",
-    Callback = function(v) CONFIG.AutoEquipGun = v end })
+CombatTab:CreateToggle({ Name = "Predição", CurrentValue = true, Flag = "PerfectAimPredict", Callback = function(v) CONFIG.PerfectAimPredict = v end })
+CombatTab:CreateToggle({ Name = "Travar no Alvo", CurrentValue = true, Flag = "PerfectAimLock", Callback = function(v) CONFIG.PerfectAimLock = v end })
+CombatTab:CreateToggle({ Name = "Auto Equip Gun", CurrentValue = true, Flag = "AutoEquipGun", Callback = function(v) CONFIG.AutoEquipGun = v end })
 CombatTab:CreateSlider({ Name = "Alcance", Range = {50, 1000}, Increment = 10, Suffix = " studs",
     CurrentValue = 500, Flag = "PerfectAimRange", Callback = function(v) CONFIG.PerfectAimRange = v end })
 CombatTab:CreateSlider({ Name = "Delay", Range = {0.02, 0.5}, Increment = 0.01, Suffix = "s",
     CurrentValue = 0.1, Flag = "PerfectAimDelay", Callback = function(v) CONFIG.PerfectAimDelay = v end })
-CombatTab:CreateDropdown({ Name = "Alvo Role",
-    Options = {"Murderer", "Sheriff", "Qualquer"}, CurrentOption = {"Murderer"}, Flag = "PerfectAimRole",
+CombatTab:CreateDropdown({ Name = "Alvo Role", Options = {"Murderer", "Sheriff", "Qualquer"}, CurrentOption = {"Murderer"}, Flag = "PerfectAimRole",
     Callback = function(opt)
         if opt[1] == "Qualquer" then CONFIG.PerfectAimTargetRole = nil
         else CONFIG.PerfectAimTargetRole = opt[1] end
-    end })
+    end
+})
 CombatTab:CreateSection("🎯 AIM EM PESSOA")
 CombatTab:CreateDropdown({ Name = "Mirar só em",
-    Options = getPlayerNames(), CurrentOption = {"Nenhum"}, Flag = "SpecificAim",
-    Callback = function(opt) CONFIG.SpecificAimTarget = opt[1] end })
+    Options = (function()
+        local names = {"Nenhum"}
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= player then table.insert(names, plr.Name) end
+        end
+        return names
+    end)(),
+    CurrentOption = {"Nenhum"}, Flag = "SpecificAim",
+    Callback = function(opt) CONFIG.SpecificAimTarget = opt[1] end
+})
 CombatTab:CreateSection("📷 OLD AIM")
 CombatTab:CreateToggle({ Name = "Old Aim", CurrentValue = false, Flag = "OldAim",
-    Callback = function(v)
-        CONFIG.OldAim = v
-        if v then startOldAim() startOldAimFire() else stopOldAim() stopOldAimFire() end
-    end })
+    Callback = function(v) CONFIG.OldAim = v if v then startOldAim() startOldAimFire() else stopOldAim() stopOldAimFire() end end })
 CombatTab:CreateSlider({ Name = "Old Aim FOV", Range = {5, 180}, Increment = 1, Suffix = "°",
     CurrentValue = 180, Flag = "OldAimFOV", Callback = function(v) CONFIG.AimFOV = v end })
 CombatTab:CreateSection("Hitbox")
@@ -2726,7 +2685,7 @@ MoveTab:CreateSlider({ Name = "WalkSpeed", Range = {16, 200}, Increment = 1, Cur
     Callback = function(v) CONFIG.WalkSpeed = v if CONFIG.WalkSpeedEnabled then applyWalkSpeed(v) end end })
 MoveTab:CreateToggle({ Name = "Noclip", CurrentValue = false, Flag = "Noclip", Callback = function(v) CONFIG.Noclip = v toggleNoclip(v) end })
 MoveTab:CreateToggle({ Name = "Infinite Jump", CurrentValue = false, Flag = "InfJump", Callback = function(v) CONFIG.InfiniteJump = v toggleInfJump(v) end })
-MoveTab:CreateToggle({ Name = "Invisible", CurrentValue = false, Flag = "Invisible", Callback = function(v) CONFIG.Invisible = v toggleInvisible(v) end })
+MoveTab:CreateToggle({ Name = "Invisible (REAL)", CurrentValue = false, Flag = "Invisible", Callback = function(v) CONFIG.Invisible = v toggleInvisible(v) end })
 MoveTab:CreateToggle({ Name = "Click TP", CurrentValue = false, Flag = "ClickTP", Callback = function(v) CONFIG.ClickTP = v if v then startClickTP() end end })
 MoveTab:CreateSection("🛡 God Mode OP")
 MoveTab:CreateToggle({ Name = "🏆 GOD MODE OP", CurrentValue = false, Flag = "GodModeOP",
@@ -2746,82 +2705,53 @@ ChatTab:CreateToggle({ Name = "Spam (3s)", CurrentValue = false, Flag = "ChatSpa
 
 -- Event (Halloween 2026)
 local EventTab = Window:CreateTab("Event", 4483362458)
-EventTab:CreateSection("🍬 Halloween 2026 — Doces")
-EventTab:CreateToggle({
-    Name = "Auto Farm Doces (Tween + Noclip)",
-    CurrentValue = false, Flag = "AutoCandy",
+EventTab:CreateSection("🍬 Halloween 2026 — Doces (REAL)")
+EventTab:CreateToggle({ Name = "Auto Farm Doces", CurrentValue = false, Flag = "AutoCandy",
     Callback = function(v)
         CONFIG.AutoCandy = v
-        if v then
-            notify("Shadow HUB", "🍬 Farm ativo", 2)
-            startCandyFarm()
-        else
-            stopCandyFarm()
-        end
+        if v then notify("Shadow HUB", "🍬 Farm ativo", 2) startCandyFarm()
+        else stopCandyFarm() end
     end
 })
-EventTab:CreateToggle({
-    Name = "ESP Doces", CurrentValue = false, Flag = "CandyESP",
-    Callback = function(v) CONFIG.CandyESP = v updateCandyESP() end
-})
-EventTab:CreateSlider({
-    Name = "Tween Speed", Range = {20, 200}, Increment = 5, Suffix = " studs/s",
-    CurrentValue = 80, Flag = "CandyTweenSpeed",
-    Callback = function(v) CONFIG.CandyTweenSpeed = v end
-})
-EventTab:CreateSlider({
-    Name = "Reset após X doces", Range = {0, 200}, Increment = 1,
-    CurrentValue = 50, Flag = "CandyResetAfter",
-    Callback = function(v) CONFIG.CandyResetAfter = v end
-})
-EventTab:CreateButton({
-    Name = "🍬 Coletar Agora (manual)",
-    Callback = function()
-        local n = collectCandiesOnce()
-        notify("Shadow HUB", "Coletou " .. n .. " doces", 3)
-    end
-})
-EventTab:CreateButton({
-    Name = "🔄 Resetar Contador",
-    Callback = function()
-        candyState.count = 0
-        candyState.lastNotifyMilestone = 0
-        notify("Shadow HUB", "Contador zerado", 2)
-    end
-})
-EventTab:CreateLabel("⚠ Se GOD MODE OP estiver ativo, o reset não funciona")
+EventTab:CreateToggle({ Name = "ESP Doces", CurrentValue = false, Flag = "CandyESP",
+    Callback = function(v) CONFIG.CandyESP = v updateCandyESP() end })
+EventTab:CreateSlider({ Name = "Reset após X", Range = {0, 200}, Increment = 1, CurrentValue = 50, Flag = "CandyResetAfter",
+    Callback = function(v) CONFIG.CandyResetAfter = v end })
+EventTab:CreateButton({ Name = "🍬 Coletar Agora", Callback = function()
+    local n = collectCandiesReal()
+    notify("Shadow HUB", "Coletou " .. n, 3)
+end })
+EventTab:CreateButton({ Name = "🔄 Resetar Contador", Callback = function()
+    state.candyCount = 0
+    state.candyLastNotify = 0
+    notify("Shadow HUB", "Contador zerado", 2)
+end })
 EventTab:CreateSection("🛡 Auto Win Survivor")
-EventTab:CreateToggle({
-    Name = "Ficar em Local Seguro (Innocent)",
-    CurrentValue = false, Flag = "AutoWinSurvivor",
-    Callback = function(v)
-        CONFIG.AutoWinSurvivor = v
-        if v then startAutoWinSurvivor() else stopAutoWinSurvivor() end
-    end
-})
-EventTab:CreateSlider({
-    Name = "Altura Segura", Range = {200, 1500}, Increment = 50,
-    CurrentValue = 500, Flag = "CandySafeY",
-    Callback = function(v) CONFIG.CandySafeY = v end
-})
+EventTab:CreateToggle({ Name = "Local Seguro (Innocent)", CurrentValue = false, Flag = "AutoWinSurvivor",
+    Callback = function(v) CONFIG.AutoWinSurvivor = v if v then startAutoWinSurvivor() else stopAutoWinSurvivor() end end })
+EventTab:CreateSlider({ Name = "Altura Segura", Range = {200, 1500}, Increment = 50, CurrentValue = 500, Flag = "CandySafeY",
+    Callback = function(v) CONFIG.CandySafeY = v end })
+
+-- TROLL (NOVO)
+local TrollTab = Window:CreateTab("Troll", 4483362458)
+TrollTab:CreateSection("😈 Troll Pack")
+TrollTab:CreateButton({ Name = "❄️ Freeze All (5s)", Callback = freezeAll })
+TrollTab:CreateButton({ Name = "🌀 TP All to Me", Callback = tpAllToMe })
+TrollTab:CreateButton({ Name = "💥 Explode All", Callback = explodeAll })
+TrollTab:CreateButton({ Name = "🪑 Sit All", Callback = sitAll })
+TrollTab:CreateButton({ Name = "☠️ Kill All", Callback = function() local n = killAllAlive() notify("Shadow HUB", "Matou " .. n, 3) end })
 
 -- Config Share
 local ConfigTab = Window:CreateTab("Config Share", 4483362458)
-ConfigTab:CreateButton({
-    Name = "🔑 Gerar Código",
-    Callback = function()
-        local code = generateConfigCode()
-        pcall(function() if setclipboard then setclipboard(code) end end)
-        print("=== CONFIG CODE ===")
-        print(code)
-        print("===================")
-        notify("Shadow HUB", "Código copiado! Veja F9", 5)
-    end
-})
-ConfigTab:CreateInput({
-    Name = "Código para Carregar",
-    CurrentValue = "", PlaceholderText = "Cole e Enter",
-    RemoveTextAfterFocusLost = false,
+ConfigTab:CreateButton({ Name = "🔑 Gerar Código", Callback = function()
+    local code = generateConfigCode()
+    pcall(function() if setclipboard then setclipboard(code) end end)
+    print("=== CONFIG CODE ===")
+    print(code)
+    print("===================")
+    notify("Shadow HUB", "Copiado! Veja F9", 5)
+end })
+ConfigTab:CreateInput({ Name = "Código", CurrentValue = "", PlaceholderText = "Cole e Enter", RemoveTextAfterFocusLost = false,
     Callback = function(v)
         if v and #v > 5 then
             local ok, msg = loadConfigCode(v)
@@ -2839,7 +2769,7 @@ local MiscTab = Window:CreateTab("Misc", 4483362458)
 MiscTab:CreateToggle({ Name = "Fullbright", CurrentValue = false, Flag = "Fullbright", Callback = function(v) CONFIG.Fullbright = v toggleFullbright(v) end })
 MiscTab:CreateToggle({ Name = "FPS Boost", CurrentValue = false, Flag = "FPS", Callback = function(v) pcall(function() settings().Rendering.QualityLevel = v and Enum.QualityLevel.Level01 or Enum.QualityLevel.Level10 end) end })
 MiscTab:CreateToggle({ Name = "Anti AFK", CurrentValue = true, Flag = "AntiAFK", Callback = function(v) CONFIG.AntiAFK = v end })
-MiscTab:CreateToggle({ Name = "Anti-Suspeito (não parece cheat)", CurrentValue = false, Flag = "AntiSuspeito",
+MiscTab:CreateToggle({ Name = "Anti-Suspeito", CurrentValue = false, Flag = "AntiSuspeito",
     Callback = function(v) CONFIG.AntiSuspeito = v if v then startAntiSuspeito() else stopAntiSuspeito() end end })
 MiscTab:CreateButton({ Name = "💀 Kill Self", Callback = killSelf })
 
@@ -2892,4 +2822,4 @@ end)
 task.spawn(function() startSuspiciousDetector() end)
 task.spawn(function() startTeamDetector() end)
 
-notify("Shadow HUB v5.8", "Invisible real + Speed toggle fix. K pra abrir.", 5)
+notify("Shadow HUB v5.9.2", "FLING + CANDY + INVISIBLE real. 141 funções. K pra abrir.", 5)
